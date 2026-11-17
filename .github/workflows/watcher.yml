@@ -47,6 +47,10 @@ jobs:
         run: |
           printf '%s' "$CONFIG_JSON" > config.json
           printf '%s' "$TV_SESSION" > session.json
+          [ -s config.json ] || { echo "::error::Secret CONFIG_JSON is empty or missing"; exit 1; }
+          [ -s session.json ] || { echo "::error::Secret TV_SESSION is empty or missing"; exit 1; }
+          python -c "import json; json.load(open('config.json'))" || { echo "::error::CONFIG_JSON is not valid JSON"; exit 1; }
+          python -c "import json; json.load(open('session.json'))" || { echo "::error::TV_SESSION is not valid JSON"; exit 1; }
 
       - name: Check chart once
         run: xvfb-run -a python watcher.py --once ${{ inputs.force && '--force' || '' }}
