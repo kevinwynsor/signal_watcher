@@ -246,6 +246,43 @@ def process(cfg, state, v):
     state["last_key"] = key
 
 
+def open_data_window(page):
+    """Open the right-panel Data Window if it isn't showing (labels vary by TradingView version)."""
+    try:
+        found = False
+        labels = []
+        for b in page.locator("[aria-label], [data-tooltip], [data-name], [title]").all():
+            try:
+                if not b.is_visible():
+                    continue
+                attrs = [b.get_attribute(a) or "" for a in ("aria-label", "data-tooltip", "data-name", "title")]
+            except Exception:
+                continue
+            label = " | ".join(a for a in attrs if a)
+            low = label.lower()
+            box = b.bounding_box()
+            if box and box["x"] > 1300:  # right-hand toolbar
+                labels.append(label)
+            if "data window" in low or "object tree" in low or "object_tree" in low or "data_window" in low:
+                log(f"Opening right panel: {label}")
+                b.click()
+                page.wait_for_timeout(2500)
+                found = True
+                break
+        if not found:
+            log("Data Window button not found. Right toolbar items: " + "; ".join(labels[:30]))
+        for name in ("Data window", "Data Window"):
+            tab = page.get_by_text(name, exact=True)
+            if tab.count() and tab.first.is_visible():
+                log("Clicking the Data window tab")
+                tab.first.click()
+                page.wait_for_timeout(2000)
+                break
+        page.mouse.move(1, 1)  # keep the cursor off the chart so values show the latest bar
+    except Exception as e:
+        log(f"open data window failed: {e}")
+
+
 def once(cfg, force=False):
     if not force and not in_market_window():
         log("Outside market hours, skipping.")
@@ -259,7 +296,7 @@ def once(cfg, force=False):
             storage_state=str(SESSION_PATH) if SESSION_PATH.exists() else None)
         page = ctx.new_page()
         page.goto(cfg["chart_url"], wait_until="domcontentloaded", timeout=90000)
-        for _ in range(18):  # up to ~90 s for the chart + Data Window to load
+        for i in range(18):  # up to ~90 s for the chart + Data Window to load
             page.wait_for_timeout(5000)
             try:
                 # "Session disconnected" (only one active session per account): take over.
@@ -276,6 +313,8 @@ def once(cfg, force=False):
                 log(f"read error: {e}")
             if v:
                 break
+            if i in (2, 9):  # values still missing after ~15 s / ~50 s
+                open_data_window(page)
         if not v:
             page.screenshot(path=str(HERE / "debug.png"))
         browser.close()
