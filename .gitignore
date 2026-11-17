@@ -1,0 +1,8 @@
+config.json
+session.json
+state.json
+browser_profile/
+__pycache__/
+*.log
+debug.png
+.env

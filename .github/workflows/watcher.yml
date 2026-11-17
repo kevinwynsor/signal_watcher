@@ -1,0 +1,68 @@
+name: QQQ watcher
+
+on:
+  schedule:
+    # every 15 min, Mon-Fri, 13:00-21:59 UTC (covers 9:30-16:15 ET in both EST and EDT;
+    # the script itself skips runs outside market hours)
+    - cron: "*/15 13-21 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Run even outside market hours"
+        type: boolean
+        default: false
+
+concurrency:
+  group: watcher
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: |
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+
+      - name: Restore last state
+        uses: actions/cache/restore@v4
+        with:
+          path: state.json
+          key: watcher-state-${{ github.run_id }}
+          restore-keys: watcher-state-
+
+      - name: Write config and session from secrets
+        env:
+          CONFIG_JSON: ${{ secrets.CONFIG_JSON }}
+          TV_SESSION: ${{ secrets.TV_SESSION }}
+        run: |
+          printf '%s' "$CONFIG_JSON" > config.json
+          printf '%s' "$TV_SESSION" > session.json
+
+      - name: Check chart once
+        run: xvfb-run -a python watcher.py --once ${{ inputs.force && '--force' || '' }}
+
+      - name: Save state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: state.json
+          key: watcher-state-${{ github.run_id }}
+
+      - name: Upload screenshot on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug
+          path: debug.png
+          if-no-files-found: ignore
+          retention-days: 3

@@ -1,0 +1,9 @@
+{
+  "chart_url": "https://www.tradingview.com/chart/iggcA7K7/?symbol=NASDAQ%3AQQQ",
+  "poll_seconds": 5,
+  "stop_after_et": "16:10",
+
+  "ntfy": { "server": "https://ntfy.sh", "topic": "kebkeb098" },
+  "telegram": { "bot_token": "", "chat_id": "" },
+  "discord": { "webhook_url": "" }
+}
