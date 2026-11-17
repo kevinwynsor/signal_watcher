@@ -262,6 +262,15 @@ def once(cfg, force=False):
         for _ in range(18):  # up to ~90 s for the chart + Data Window to load
             page.wait_for_timeout(5000)
             try:
+                # "Session disconnected" (only one active session per account): take over.
+                btn = page.get_by_role("button", name="Connect", exact=True)
+                if btn.count() and btn.first.is_visible():
+                    log("Session-disconnected dialog: clicking Connect")
+                    btn.first.click()
+                    page.wait_for_timeout(5000)
+            except Exception as e:
+                log(f"connect-dialog check failed: {e}")
+            try:
                 v = read_values(page)
             except Exception as e:
                 log(f"read error: {e}")
