@@ -4,7 +4,8 @@ on:
   schedule:
     # every 15 min, Mon-Fri, 13:00-21:59 UTC (covers 9:30-16:15 ET in both EST and EDT;
     # the script itself skips runs outside market hours)
-    - cron: "*/15 13-21 * * 1-5"
+    # off-peak minutes, 17 min apart (GitHub drops/delays runs at :00/:15/:30/:45)
+    - cron: "4,21,38,55 13-21 * * 1-5"
   workflow_dispatch:
     inputs:
       force:
