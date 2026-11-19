@@ -32,7 +32,9 @@ SESSION_PATH = HERE / "session.json"   # exported login (cookies + local storage
 ET = ZoneInfo("America/New_York")
 
 FIELDS = ["type", "day", "time", "dir", "score", "strike", "premium",
-          "stop", "price", "result", "contracts", "dte"]
+          "stop", "price", "result", "contracts", "dte", "tp1", "tp2", "tp1px", "tp2px",
+          "ldir", "lbar", "lentry", "lpx", "lprem", "lpct", "ltgtn", "ltgt", "ltgtpx",
+          "lstop", "lstoppx", "lpxstop", "lstopk"]
 
 # Finds every Data Window row titled "WATCH <field>" and returns {field: value text}.
 READ_JS = """
@@ -124,7 +126,9 @@ def describe(v):
         body = (f"{v.get('strike', '?')}{side[0]} {v.get('dte', '?')}DTE ~${v.get('premium', '?')} "
                 f"(QQQ {px}, candle close {when})\n"
                 f"Wrong if a 15m candle closes {stop_side} {v.get('stop', '?')}\n"
-                f"Size <= {v.get('contracts', '?')} contracts. Confirm premium/delta at your broker.")
+                f"TP1 ${v.get('tp1', '?')} (QQQ ~{v.get('tp1px', '?')})")
+        if num(v.get("tp2")) is not None:
+            body += f"\nTP2 ${v['tp2']} (QQQ ~{v.get('tp2px', '?')})"
         return title, body, True
     if typ == 2:
         return (f"QQQ {side}: TP1 hit",
@@ -134,6 +138,57 @@ def describe(v):
         return (f"QQQ {side}: EXIT",
                 f"Est. trade result {v.get('result', '?')}% on premium (QQQ {px}, {when}).", True)
     return None
+
+
+def live_update(cfg, state, v):
+    """While in a trade: one status update per new 15m bar, plus a one-time
+    heads-up when QQQ gets within `near_points` of the target or stop."""
+    d = int(num(v.get("ldir")) or 0)
+    if d == 0:
+        state.pop("live", None)
+        return
+    px, prem, pct = num(v.get("lpx")), num(v.get("lprem")), num(v.get("lpct"))
+    if px is None or prem is None:
+        return
+    side = "CALL" if d == 1 else "PUT"
+    live = state.setdefault("live", {})
+    trade_id = f"{d}|{v.get('lentry')}"
+    if live.get("trade") != trade_id:
+        live.clear()
+        live["trade"] = trade_id
+    near = float(cfg.get("near_points", 0.50))
+
+    tgt_n = int(num(v.get("ltgtn")) or 1)
+    tgt, tgt_px = num(v.get("ltgt")), num(v.get("ltgtpx"))
+    stop, stop_px, px_stop = num(v.get("lstop")), num(v.get("lstoppx")), num(v.get("lpxstop"))
+    stop_name = {0: "Stop", 1: "Breakeven stop", 2: "Runner stop"}.get(int(num(v.get("lstopk")) or 0), "Stop")
+
+    def gap(level):  # QQQ points still to go (positive = not reached yet)
+        return None if level is None else round(abs(level - px), 2)
+
+    lines = [f"QQQ {px:.2f} | option ~${prem:.2f} ({pct:+.1f}%)"]
+    g_tgt = gap(tgt_px)
+    if tgt is not None and tgt_px is not None:
+        lines.append(f"TP{tgt_n} ${tgt:.2f} @ QQQ {tgt_px:.2f} -> {g_tgt:.2f} pts away")
+    g_stop = gap(stop_px)
+    if stop is not None and stop_px is not None:
+        lines.append(f"{stop_name} ${stop:.2f} @ QQQ {stop_px:.2f} -> {g_stop:.2f} pts away")
+    if px_stop is not None:
+        lines.append(f"Price stop: 15m close {'below' if d == 1 else 'above'} {px_stop:.2f} "
+                     f"({abs(px - px_stop):.2f} pts away)")
+    body = "\n".join(lines)
+
+    bar = v.get("lbar")
+    if bar != live.get("bar"):
+        live["bar"] = bar
+        log(f"Live update ({side}): {lines[0]}")
+        notify(cfg, f"QQQ {side} update", body)
+    for name, g in ((f"TP{tgt_n}", g_tgt), (stop_name, g_stop)):
+        k = f"near_{name}"
+        if g is not None and g <= near and not live.get(k):
+            live[k] = True
+            log(f"Near {name}: {g:.2f} pts")
+            notify(cfg, f"QQQ {side}: near {name} ({g:.2f} pts)", body, urgent=True)
 
 
 # ─────────────── main loop ───────────────
@@ -217,6 +272,10 @@ def run(cfg):
                         log("First run: baseline saved, no notification for the existing event.")
                     state["last_key"] = key
                     STATE_PATH.write_text(json.dumps(state), encoding="utf-8")
+                before = json.dumps(state.get("live"))
+                live_update(cfg, state, v)
+                if json.dumps(state.get("live")) != before:
+                    STATE_PATH.write_text(json.dumps(state), encoding="utf-8")
             time.sleep(poll)
         ctx.close()
 
@@ -232,6 +291,7 @@ def in_market_window():
 def process(cfg, state, v):
     """Compare the chart's latest event to the saved one and notify if new."""
     key = event_key(v)
+    live_update(cfg, state, v)
     if key == state.get("last_key"):
         log(f"No new event (latest: {key})")
         return
