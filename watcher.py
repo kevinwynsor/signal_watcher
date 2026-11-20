@@ -15,6 +15,7 @@ Usage:
 
 import argparse
 import json
+import os
 import sys
 import time
 from datetime import datetime
@@ -350,7 +351,8 @@ def once(cfg, force=False):
     state = load_json(STATE_PATH, {})
     v = None
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=False)  # headed under xvfb: less likely to be flagged
+        # headed under xvfb: less likely to be flagged. On GH runners use preinstalled Chrome (no download/apt).
+        browser = pw.chromium.launch(headless=False, channel="chrome" if os.environ.get("GITHUB_ACTIONS") else None)
         ctx = browser.new_context(
             viewport={"width": 1400, "height": 900},
             storage_state=str(SESSION_PATH) if SESSION_PATH.exists() else None)

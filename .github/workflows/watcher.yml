@@ -16,7 +16,7 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 7
     steps:
       - uses: actions/checkout@v4
 
@@ -27,21 +27,6 @@ jobs:
 
       - name: Install Python packages
         run: pip install -r requirements.txt
-
-      - name: Cache Playwright browsers
-        id: pw-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: pw-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
-
-      - name: Install Chromium (cache miss)
-        if: steps.pw-cache.outputs.cache-hit != 'true'
-        run: python -m playwright install --with-deps chromium
-
-      - name: Install Chromium system libs (cache hit)
-        if: steps.pw-cache.outputs.cache-hit == 'true'
-        run: python -m playwright install-deps chromium
 
       - name: Restore last state
         uses: actions/cache/restore@v4
@@ -63,6 +48,7 @@ jobs:
           python -c "import json; json.load(open('session.json'))" || { echo "::error::TV_SESSION is not valid JSON"; exit 1; }
 
       - name: Check chart once
+        timeout-minutes: 4
         run: xvfb-run -a python -u watcher.py --once ${{ inputs.force && '--force' || '' }}
 
       - name: Save state
