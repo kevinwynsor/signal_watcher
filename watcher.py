@@ -307,6 +307,22 @@ def process(cfg, state, v):
     state["last_key"] = key
 
 
+def dismiss_popups(page):
+    """Close TradingView promo/ad overlays (e.g. 'Early bird offer') that block the chart."""
+    try:
+        page.keyboard.press("Escape")
+        for sel in ['[data-name="close"]', 'button[aria-label="Close"]', '[class*="closeButton"]',
+                    '[data-qa-id="promo-dialog-close-button"]']:
+            loc = page.locator(sel)
+            for i in range(min(loc.count(), 5)):
+                el = loc.nth(i)
+                if el.is_visible():
+                    el.click(timeout=1000)
+                    log(f"Closed popup ({sel})")
+    except Exception as e:
+        log(f"dismiss popups failed: {e}")
+
+
 def open_data_window(page):
     """Open the right-panel Data Window if it isn't showing (labels vary by TradingView version)."""
     try:
@@ -360,6 +376,7 @@ def once(cfg, force=False):
         page.goto(cfg["chart_url"], wait_until="domcontentloaded", timeout=90000)
         for i in range(18):  # up to ~90 s for the chart + Data Window to load
             page.wait_for_timeout(5000)
+            dismiss_popups(page)
             try:
                 # "Session disconnected" (only one active session per account): take over.
                 btn = page.get_by_role("button", name="Connect", exact=True)

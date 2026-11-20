@@ -24,3 +24,4 @@
 - Confirm cron-job.org interval + timezone match market hours.
 - PAT expiry date — rotate before it lapses or runs silently stop.
 - 2026-11-21: CI uses runner's preinstalled Chrome (`channel="chrome"` when GITHUB_ACTIONS) — removed Playwright browser cache + `install-deps` apt step (slow). Step timeout 4m, job 7m.
+- 2026-11-21: `dismiss_popups()` (Esc + close-button selectors) each `--once` poll — promo overlays (Early bird offer) blocked chart/Data Window.
